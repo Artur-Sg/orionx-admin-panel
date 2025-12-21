@@ -1,5 +1,11 @@
 import React from "react";
-import { BrowserRouter, Route, Routes, Outlet } from "react-router-dom";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+  Outlet,
+  Navigate,
+} from "react-router-dom";
 import {
   ThemedLayoutV2,
   ThemedTitleV2,
@@ -10,7 +16,7 @@ import {
 import routerProvider, {
   NavigateToResource,
 } from "@refinedev/react-router-v6";
-import { Refine } from "@refinedev/core";
+import { Authenticated, Refine } from "@refinedev/core";
 import { ConfigProvider } from "antd";
 import dataProvider from "@refinedev/simple-rest";
 
@@ -18,6 +24,8 @@ import { PostsList } from "./pages/posts/list";
 import { PostsCreate } from "./pages/posts/create";
 import { PostsEdit } from "./pages/posts/edit";
 import { PostsShow } from "./pages/posts/show";
+import { LoginPage } from "./pages/login";
+import { authProvider } from "./authProvider";
 
 export const App: React.FC = () => {
   return (
@@ -25,6 +33,7 @@ export const App: React.FC = () => {
       <ConfigProvider theme={RefineThemes.Blue}>
         <Refine
           dataProvider={dataProvider("https://api.fake-rest.refine.dev")}
+          authProvider={authProvider}
           notificationProvider={notificationProvider}
           routerProvider={routerProvider}
           resources={[
@@ -42,18 +51,24 @@ export const App: React.FC = () => {
           }}
         >
           <Routes>
+            <Route path="/login" element={<LoginPage />} />
             <Route
               element={
-                <ThemedLayoutV2
-                  Title={({ collapsed }) => (
-                    <ThemedTitleV2
-                      collapsed={collapsed}
-                      text="OrionX Admin"
-                    />
-                  )}
+                <Authenticated
+                  key="authenticated"
+                  fallback={<Navigate to="/login" replace />}
                 >
-                  <Outlet />
-                </ThemedLayoutV2>
+                  <ThemedLayoutV2
+                    Title={({ collapsed }) => (
+                      <ThemedTitleV2
+                        collapsed={collapsed}
+                        text="OrionX Admin"
+                      />
+                    )}
+                  >
+                    <Outlet />
+                  </ThemedLayoutV2>
+                </Authenticated>
               }
             >
               <Route index element={<NavigateToResource resource="posts" />} />
