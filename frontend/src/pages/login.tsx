@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Layout, Space, Typography } from "antd";
-import { ThemedTitleV2 } from "@refinedev/antd";
 import { useLogin } from "@refinedev/core";
 
 type CredentialResponse = {
@@ -83,23 +82,21 @@ export const LoginPage: React.FC = () => {
       }}
     >
       <Space direction="vertical" align="center" size="large">
-        <ThemedTitleV2
-          collapsed={false}
-          wrapperStyles={{
-            fontSize: "22px",
-          }}
-        />
+        <img src="/src/assets/logo/logo.svg" alt="OrionX" style={{ height: 64 }} />
+        <Typography.Text type="secondary">
+          Sign in to the subscriptions admin panel
+        </Typography.Text>
         <div ref={divRef} />
         {isLoading && (
           <Typography.Text type="secondary">
-            Вход в процессе...
+            Signing you in...
           </Typography.Text>
         )}
         {errorMessage ? (
           <Typography.Text type="danger">{errorMessage}</Typography.Text>
         ) : (
           <Typography.Text type="secondary">
-            Powered by Google
+            OrionX — blockchain expertise you can rely on.
           </Typography.Text>
         )}
       </Space>

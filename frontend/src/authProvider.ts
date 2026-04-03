@@ -1,56 +1,85 @@
 import { AuthProvider } from "@refinedev/core";
 
-const COOKIE_NAME = "orionx_auth";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-
-type DemoUser = {
-  name: string;
-  email: string;
-  avatar?: string;
-  provider: "google";
-};
-
-type GoogleProfile = {
-  name?: string;
-  email?: string;
-  picture?: string;
-};
+const ACCESS_TOKEN_KEY = "orionx_access";
+const REFRESH_TOKEN_KEY = "orionx_refresh";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 type GoogleCredentialResponse = {
   credential?: string;
 };
 
-const readCookie = () => {
-  const match = document.cookie.match(
-    new RegExp(`(?:^|; )${COOKIE_NAME}=([^;]*)`),
-  );
-  return match ? match[1] : null;
+type TokenResponse = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
 };
 
-const writeCookie = (value: string) => {
-  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(
-    value,
-  )}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
+type UserIdentity = {
+  id: string;
+  email: string;
+  is_active: boolean;
 };
 
-const clearCookie = () => {
-  document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; samesite=lax`;
+const readToken = (key: string) => localStorage.getItem(key);
+
+const writeTokens = (tokens: TokenResponse) => {
+  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
 };
 
-const encodeUser = (user: DemoUser) => btoa(JSON.stringify(user));
+const clearTokens = () => {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+};
 
-const decodeUser = (value: string) => {
+const apiPost = async <T>(path: string, body: unknown, token?: string): Promise<T> => {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const message = await res.text();
+    throw new Error(message || "Request failed");
+  }
+
+  return (await res.json()) as T;
+};
+
+const apiGet = async <T>(path: string, token: string): Promise<T> => {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const message = await res.text();
+    throw new Error(message || "Request failed");
+  }
+
+  return (await res.json()) as T;
+};
+
+const tryRefresh = async (): Promise<TokenResponse | null> => {
+  const refreshToken = readToken(REFRESH_TOKEN_KEY);
+  if (!refreshToken) return null;
+
   try {
-    return JSON.parse(atob(value)) as DemoUser;
+    const tokens = await apiPost<TokenResponse>("/auth/refresh", {
+      refresh_token: refreshToken,
+    });
+    writeTokens(tokens);
+    return tokens;
   } catch {
+    clearTokens();
     return null;
   }
-};
-
-const getUser = () => {
-  const raw = readCookie();
-  if (!raw) return null;
-  return decodeUser(decodeURIComponent(raw));
 };
 
 export const authProvider: AuthProvider = {
@@ -69,18 +98,10 @@ export const authProvider: AuthProvider = {
     }
 
     try {
-      const payload = credential.split(".")[1];
-      const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-      const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, "=");
-      const decoded = JSON.parse(atob(padded)) as GoogleProfile;
-
-      const user: DemoUser = {
-        name: decoded.name ?? "Google User",
-        email: decoded.email ?? "unknown@email",
-        avatar: decoded.picture,
-        provider: "google",
-      };
-      writeCookie(encodeUser(user));
+      const tokens = await apiPost<TokenResponse>("/auth/google", {
+        credential,
+      });
+      writeTokens(tokens);
       return {
         success: true,
         redirectTo: "/",
@@ -90,32 +111,50 @@ export const authProvider: AuthProvider = {
         success: false,
         error: {
           name: "AuthError",
-          message: "Invalid Google credential.",
+          message: "Google auth failed.",
         },
       };
     }
   },
   logout: async () => {
-    clearCookie();
+    clearTokens();
     return {
       success: true,
       redirectTo: "/login",
     };
   },
   check: async () => {
-    const user = getUser();
-    if (user) {
+    const accessToken = readToken(ACCESS_TOKEN_KEY);
+    if (!accessToken) {
       return {
-        authenticated: true,
+        authenticated: false,
+        redirectTo: "/login",
       };
     }
-    return {
-      authenticated: false,
-      redirectTo: "/login",
-    };
+
+    try {
+      await apiGet<UserIdentity>("/users/me", accessToken);
+      return { authenticated: true };
+    } catch {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        return { authenticated: true };
+      }
+      return {
+        authenticated: false,
+        redirectTo: "/login",
+      };
+    }
   },
   getIdentity: async () => {
-    return getUser();
+    const accessToken = readToken(ACCESS_TOKEN_KEY);
+    if (!accessToken) return null;
+
+    try {
+      return await apiGet<UserIdentity>("/users/me", accessToken);
+    } catch {
+      return null;
+    }
   },
   onError: async (error) => {
     return { error };
