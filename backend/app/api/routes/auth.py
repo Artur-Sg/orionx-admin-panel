@@ -9,7 +9,7 @@ from app.modules.auth.security import create_token, decode_token
 from app.modules.auth.service import (
     create_user_with_org,
     get_or_create_user_from_google,
-    get_primary_org_id,
+    get_primary_org_and_role,
     get_user_by_email,
     verify_user_credentials,
 )
@@ -18,11 +18,11 @@ from app.modules.users.schemas import UserCreate
 router = APIRouter()
 
 
-def _token_pair(user_id: str, org_id: str) -> TokenResponse:
+def _token_pair(user_id: str, org_id: str, role: str) -> TokenResponse:
     access_ttl = settings.jwt_access_ttl_min * 60
     refresh_ttl = settings.jwt_refresh_ttl_days * 24 * 60 * 60
-    access_token = create_token(user_id, org_id, "access", access_ttl)
-    refresh_token = create_token(user_id, org_id, "refresh", refresh_ttl)
+    access_token = create_token(user_id, org_id, "access", access_ttl, role)
+    refresh_token = create_token(user_id, org_id, "refresh", refresh_ttl, role)
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -35,7 +35,7 @@ async def signup(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> Tok
     async with db.begin():
         user, org = await create_user_with_org(db, payload.email, payload.password)
 
-    return _token_pair(str(user.id), str(org.id))
+    return _token_pair(str(user.id), str(org.id), "user")
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -44,11 +44,11 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> To
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    org_id = await get_primary_org_id(db, user)
-    if org_id is None:
+    org_id, role = await get_primary_org_and_role(db, user)
+    if org_id is None or role is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no organization")
 
-    return _token_pair(str(user.id), org_id)
+    return _token_pair(str(user.id), org_id, role)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -61,7 +61,8 @@ async def refresh(payload: RefreshRequest) -> TokenResponse:
     if token_payload.type != "refresh":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
 
-    return _token_pair(token_payload.sub, token_payload.org_id)
+    role = token_payload.role or "user"
+    return _token_pair(token_payload.sub, token_payload.org_id, role)
 
 
 @router.post("/google", response_model=TokenResponse)
@@ -95,6 +96,6 @@ async def google_auth(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email not provided")
 
     async with db.begin():
-        user, org = await get_or_create_user_from_google(db, email)
+        user, org, role = await get_or_create_user_from_google(db, email)
 
-    return _token_pair(str(user.id), str(org.id))
+    return _token_pair(str(user.id), str(org.id), role)

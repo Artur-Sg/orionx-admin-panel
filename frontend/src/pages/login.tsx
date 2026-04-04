@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Layout, Space, Typography } from "antd";
+import { Link } from "react-router-dom";
 import { useLogin } from "@refinedev/core";
 
 type CredentialResponse = {
@@ -99,6 +100,11 @@ export const LoginPage: React.FC = () => {
             OrionX — blockchain expertise you can rely on.
           </Typography.Text>
         )}
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          By signing in, you agree to our{" "}
+          <Link to="/privacy">Privacy Policy</Link> and{" "}
+          <Link to="/terms">Terms of Service</Link>.
+        </Typography.Text>
       </Space>
     </Layout>
   );

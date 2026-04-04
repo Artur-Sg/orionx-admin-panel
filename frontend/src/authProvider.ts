@@ -18,6 +18,8 @@ type UserIdentity = {
   id: string;
   email: string;
   is_active: boolean;
+  org_id: string;
+  role: string;
 };
 
 const readToken = (key: string) => localStorage.getItem(key);

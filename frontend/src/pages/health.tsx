@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Button, Card, Space, Tag, Typography } from "antd";
+import { useGetIdentity } from "@refinedev/core";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -9,6 +10,8 @@ type HealthResponse = {
 };
 
 export const HealthPage: React.FC = () => {
+  const { data: identity } = useGetIdentity<{ role?: string }>();
+  const isAdmin = identity?.role === "admin";
   const [loading, setLoading] = useState(false);
   const [redisData, setRedisData] = useState<HealthResponse | null>(null);
   const [apisixData, setApisixData] = useState<HealthResponse | null>(null);
@@ -33,11 +36,23 @@ export const HealthPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (isAdmin) {
+      load();
+    }
+  }, [isAdmin, load]);
 
   const redisOk = redisData?.status === "ok";
   const apisixOk = apisixData?.status === "ok";
+
+  if (!isAdmin) {
+    return (
+      <Card title="Service Health" style={{ maxWidth: 520 }}>
+        <Typography.Text type="secondary">
+          You do not have access to this section.
+        </Typography.Text>
+      </Card>
+    );
+  }
 
   return (
     <Card title="Service Health" style={{ maxWidth: 520 }}>

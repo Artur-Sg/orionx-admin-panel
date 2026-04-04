@@ -14,6 +14,7 @@ class TokenPayload(BaseModel):
     org_id: str
     type: str
     exp: int
+    role: str | None = None
 
 
 def hash_password(password: str) -> str:
@@ -24,11 +25,18 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return pwd_context.verify(password, hashed_password)
 
 
-def create_token(subject: str, org_id: str, token_type: str, ttl_seconds: int) -> str:
+def create_token(
+    subject: str,
+    org_id: str,
+    token_type: str,
+    ttl_seconds: int,
+    role: str = "user",
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     payload = {
         "sub": subject,
         "org_id": org_id,
+        "role": role,
         "type": token_type,
         "exp": expire,
     }
