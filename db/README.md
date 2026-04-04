@@ -25,6 +25,8 @@ Connection:
 - Host: `localhost`
 - Port: `6379`
 
+RQ worker (backend) requires Redis to be running.
+
 ## Connect with psql
 
 ```bash

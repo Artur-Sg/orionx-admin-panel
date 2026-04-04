@@ -24,6 +24,12 @@ class Chain(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    sync_status: Mapped[str] = mapped_column(String(32), default="pending")
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sync_error: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    last_sync_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class UserChainAccess(Base):

@@ -18,6 +18,7 @@ Required values:
 ```
 VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 VITE_API_URL=http://localhost:8000
+VITE_GATEWAY_URL=https://api.orionx.one
 ```
 
 Run dev server:
@@ -36,6 +37,7 @@ http://localhost:5173
 ```
 VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 VITE_API_URL=https://api.example.com
+VITE_GATEWAY_URL=https://api.orionx.one
 ```
 2. Build static assets:
 ```bash

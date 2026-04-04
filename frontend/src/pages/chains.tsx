@@ -4,6 +4,7 @@ import type { TablePaginationConfig, SorterResult } from "antd/es/table/interfac
 import { useGetIdentity } from "@refinedev/core";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const GATEWAY_URL = import.meta.env.VITE_GATEWAY_URL ?? "https://api.orionx.one";
 const ACCESS_TOKEN_KEY = "orionx_access";
 
 const statusOptions = ["draft", "active", "disabled", "archived"];
@@ -18,6 +19,8 @@ type Chain = {
     rpc_target_url: string;
     description?: string | null;
     sort_order: number;
+    sync_status?: string;
+    sync_error?: string | null;
 };
 
 type UserChain = {
@@ -40,6 +43,18 @@ type ChainListResponse = {
 
 type UserChainListResponse = {
     items: UserChain[];
+    total: number;
+};
+
+type PublicChain = {
+    id: string;
+    name: string;
+    status: string;
+    description?: string | null;
+};
+
+type PublicChainListResponse = {
+    items: PublicChain[];
     total: number;
 };
 
@@ -66,7 +81,7 @@ export const ChainsPage: React.FC = () => {
     const [userLoading, setUserLoading] = useState(false);
     const [items, setItems] = useState<Chain[]>([]);
     const [userItems, setUserItems] = useState<UserChain[]>([]);
-    const [availableItems, setAvailableItems] = useState<Chain[]>([]);
+    const [availableItems, setAvailableItems] = useState<PublicChain[]>([]);
     const [total, setTotal] = useState(0);
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
@@ -136,7 +151,7 @@ export const ChainsPage: React.FC = () => {
             const res = await fetch(`${API_URL}/chains/available`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            const data = (await res.json()) as ChainListResponse;
+            const data = (await res.json()) as PublicChainListResponse;
             setAvailableItems(data.items || []);
         } catch {
             setAvailableItems([]);
@@ -190,6 +205,18 @@ export const ChainsPage: React.FC = () => {
     }, [isAdmin, load]);
 
     useEffect(() => {
+        if (!isAdmin) return;
+        const hasPending = items.some(
+            (item) => item.sync_status === "pending" || item.sync_status === "in_progress"
+        );
+        if (!hasPending) return;
+        const timer = window.setInterval(() => {
+            load();
+        }, 3000);
+        return () => window.clearInterval(timer);
+    }, [isAdmin, items, load]);
+
+    useEffect(() => {
         if (!isAdmin) {
             loadUserChains();
             loadAvailableChains();
@@ -213,6 +240,17 @@ export const ChainsPage: React.FC = () => {
             render: (value: string) => (
                 <Tag color={value === "active" ? "green" : "orange"}>{value}</Tag>
             ),
+        },
+        {
+            title: "Sync",
+            dataIndex: "sync_status",
+            key: "sync_status",
+            render: (value: string | undefined) => {
+                if (!value) return <Tag>unknown</Tag>;
+                if (value === "synced") return <Tag color="green">synced</Tag>;
+                if (value === "failed") return <Tag color="red">failed</Tag>;
+                return <Tag color="orange">{value}</Tag>;
+            },
         },
         { title: "Visibility", dataIndex: "visibility", key: "visibility", sorter: true },
         { title: "RPC target", dataIndex: "rpc_target_url", key: "rpc_target_url" },
@@ -238,6 +276,20 @@ export const ChainsPage: React.FC = () => {
                         }}
                     >
                         Access
+                    </Button>
+                    <Button
+                        type="link"
+                        onClick={async () => {
+                            const token = getToken();
+                            if (!token) return;
+                            await fetch(`${API_URL}/admin/chains/${record.id}/sync`, {
+                                method: "POST",
+                                headers: { Authorization: `Bearer ${token}` },
+                            });
+                            await load();
+                        }}
+                    >
+                        Resync
                     </Button>
                     <Popconfirm
                         title="Delete chain?"
@@ -275,7 +327,12 @@ export const ChainsPage: React.FC = () => {
                         columns={[
                             { title: "Name", dataIndex: "name", key: "name" },
                             { title: "Status", dataIndex: "access_status", key: "access_status" },
-                            { title: "Endpoint", dataIndex: "rpc_target_url", key: "rpc_target_url" },
+                            {
+                                title: "Endpoint",
+                                key: "endpoint",
+                                render: (_: unknown, record: UserChain) =>
+                                    `${GATEWAY_URL}/rpc/${record.code}/`,
+                            },
                             {
                                 title: "Quota",
                                 dataIndex: "quota_total",
@@ -303,6 +360,9 @@ export const ChainsPage: React.FC = () => {
                             No chains assigned to your account yet.
                         </Typography.Text>
                     )}
+                    <Typography.Text type="secondary">
+                        API key required. Contact info@orionx.one or Telegram @OrionXone.
+                    </Typography.Text>
                 </Card>
 
                 <Card title="Available chains">
@@ -311,9 +371,8 @@ export const ChainsPage: React.FC = () => {
                         dataSource={availableItems}
                         columns={[
                             { title: "Name", dataIndex: "name", key: "name" },
-                            { title: "Code", dataIndex: "code", key: "code" },
                             { title: "Status", dataIndex: "status", key: "status" },
-                            { title: "Endpoint", dataIndex: "rpc_target_url", key: "rpc_target_url" },
+                            { title: "Description", dataIndex: "description", key: "description" },
                         ]}
                         pagination={false}
                     />
@@ -397,6 +456,8 @@ export const ChainsPage: React.FC = () => {
                             pageSize,
                             total,
                             showSizeChanger: true,
+                            pageSizeOptions: ["10", "20", "50", "100"],
+                            locale: { items_per_page: "" },
                             onChange: (p, size) => {
                                 setPage(p);
                                 if (size) setPageSize(size);

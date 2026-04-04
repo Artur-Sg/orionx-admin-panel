@@ -9,10 +9,9 @@ Admin panel for managing users and subscription plans, with Google auth and API 
   - Calls backend only
 - **Backend**: FastAPI (source of truth)
   - Users/Orgs/Memberships/Plans/Subscriptions in Postgres
-  - JWT access/refresh tokens
   - APISIX admin integration (health check + future sync)
 - **Data**: Postgres (source of truth)
-- **Queue/Cache**: Redis (RQ worker later)
+- **Queue/Cache**: Redis + RQ worker (sync to APISIX)
 - **Gateway**: APISIX for auth/limits on your APIs
 
 ## Repository Layout
@@ -20,7 +19,6 @@ Admin panel for managing users and subscription plans, with Google auth and API 
 - `frontend/` — UI (React/Vite/Refine)
 - `backend/` — FastAPI service, migrations, auth
 - `db/` — Docker Compose for Postgres + Redis
-- `AGENTS.md` / `CLAUDE.md` — workflow guidance (dev only)
 
 ## Local Quickstart
 
@@ -56,6 +54,11 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+Start worker:
+```bash
+python -m app.workers.rq_worker
+```
+
 Health checks:
 ```
 GET http://localhost:8000/health
@@ -74,6 +77,7 @@ Edit `frontend/.env`:
 ```
 VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 VITE_API_URL=http://localhost:8000
+VITE_GATEWAY_URL=https://api.orionx.one
 ```
 
 Run UI:
@@ -101,7 +105,7 @@ In Google Cloud Console → Credentials → OAuth Client ID:
 ## Notes
 
 - APISIX Admin API is configured via `APISIX_ADMIN_URL` and `APISIX_ADMIN_KEY`.
-- Redis is present; RQ worker can be added later for async sync.
+- Redis + RQ worker are required for async sync to APISIX.
 
 ## Production Deploy (Outline)
 
@@ -117,6 +121,7 @@ alembic upgrade head
 - Install Python 3.11+ and create a virtualenv.
 - Configure `.env` with production values (DB, Redis, JWT secret, CORS origins, APISIX admin).
 - Run with a process manager (systemd/supervisor) and put Nginx/Traefik in front.
+- Start RQ worker as a separate process (systemd/supervisor).
 
 ### 3) Frontend
 - Build static assets:

@@ -38,6 +38,12 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+### 5) Run the worker
+```bash
+python -m app.workers.rq_worker
+```
+Note: on macOS the worker uses `SimpleWorker` automatically to avoid fork/objc issues.
+
 Health check:
 ```
 GET http://localhost:8000/health
@@ -74,7 +80,11 @@ alembic upgrade head
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
-6. Put a reverse proxy in front (Nginx/Traefik) and terminate TLS there.
+6. Run the worker (systemd/supervisor):
+```bash
+python -m app.workers.rq_worker
+```
+7. Put a reverse proxy in front (Nginx/Traefik) and terminate TLS there.
 
 ## Structure
 

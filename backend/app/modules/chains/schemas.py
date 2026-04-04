@@ -34,12 +34,30 @@ class ChainRead(BaseModel):
     sort_order: int
     created_at: datetime
     updated_at: datetime
+    sync_status: str
+    synced_at: datetime | None
+    sync_error: str | None
+    last_sync_attempt_at: datetime | None
 
     model_config = {"from_attributes": True}
 
 
 class ChainListResponse(BaseModel):
     items: list[ChainRead]
+    total: int
+
+
+class PublicChainRead(BaseModel):
+    id: UUID
+    name: str
+    status: str
+    description: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class PublicChainListResponse(BaseModel):
+    items: list[PublicChainRead]
     total: int
 
 

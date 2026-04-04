@@ -138,6 +138,8 @@ export const UsersPage: React.FC = () => {
               pageSize,
               total,
               showSizeChanger: true,
+              pageSizeOptions: ["10", "20", "50", "100"],
+              locale: { items_per_page: "" },
               onChange: (p, size) => {
                 setPage(p);
                 if (size) setPageSize(size);
