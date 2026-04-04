@@ -107,29 +107,87 @@ In Google Cloud Console → Credentials → OAuth Client ID:
 - APISIX Admin API is configured via `APISIX_ADMIN_URL` and `APISIX_ADMIN_KEY`.
 - Redis + RQ worker are required for async sync to APISIX.
 
-## Production Deploy (Outline)
+## Production Deploy (Detailed)
 
-### 1) Database + Redis
-- Provision Postgres and Redis (managed services or Docker).
-- Ensure network access only from backend hosts.
-- Run migrations from backend:
+Below is a practical, step-by-step production setup. Adjust paths and domains as needed.
+
+### 1) Infrastructure
+- **Postgres** and **Redis** (managed or Docker).
+- **APISIX** admin endpoint reachable from backend/worker hosts.
+- **Backend** and **Worker** on the same network.
+
+### 2) Database + Redis
+- Provision Postgres and Redis.
+- Restrict access to backend/worker hosts only.
+- Example connection strings:
+```
+DATABASE_URL=postgresql+asyncpg://user:password@db-host:5432/orionx
+REDIS_URL=redis://redis-host:6379/0
+```
+
+### 3) Backend (FastAPI)
+1. Create a virtualenv and install:
+```bash
+python3 -m venv /opt/orionx-backend/.venv
+source /opt/orionx-backend/.venv/bin/activate
+pip install -e /opt/orionx-backend
+```
+2. Create `/opt/orionx-backend/.env`:
+```
+DATABASE_URL=postgresql+asyncpg://user:password@db-host:5432/orionx
+REDIS_URL=redis://redis-host:6379/0
+JWT_SECRET=very-strong-secret
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+CORS_ORIGINS=https://admin.example.com
+APISIX_ADMIN_URL=http://apisix-admin:9180
+APISIX_ADMIN_KEY=your-admin-key
+```
+3. Run migrations:
 ```bash
 alembic upgrade head
 ```
+4. Run backend (example):
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
-### 2) Backend
-- Install Python 3.11+ and create a virtualenv.
-- Configure `.env` with production values (DB, Redis, JWT secret, CORS origins, APISIX admin).
-- Run with a process manager (systemd/supervisor) and put Nginx/Traefik in front.
-- Start RQ worker as a separate process (systemd/supervisor).
+### 4) Worker (RQ)
+Run the worker as a separate process:
+```bash
+source /opt/orionx-backend/.venv/bin/activate
+python -m app.workers.rq_worker
+```
+On Linux, use systemd/supervisor for both backend and worker.
 
-### 3) Frontend
-- Build static assets:
+### 5) Frontend (Vite)
+1. Create `.env` for build:
+```
+VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+VITE_API_URL=https://api.example.com
+VITE_GATEWAY_URL=https://api.orionx.one
+```
+2. Build:
 ```bash
 npm run build
 ```
-- Serve `dist/` via Nginx or a static host (S3/CloudFront).
-- Set `VITE_API_URL` to the public backend URL.
+3. Serve `dist/` via Nginx or a static host (S3/CloudFront).
 
-### 4) Google OAuth
-- Add production domain to Authorized JavaScript origins.
+### 6) Google OAuth (Production)
+In Google Cloud Console → Credentials → OAuth Client ID:
+- Authorized JavaScript origins:
+  - `https://admin.example.com`
+
+### 7) APISIX Notes
+- APISIX is **not** the source of truth. All changes go through the backend.
+- APISIX Admin API must be private and reachable only from backend/worker.
+
+### 8) Health Checks
+- `GET /health`
+- `GET /health/redis`
+- `GET /health/apisix`
+
+### 9) Recommended systemd unit (example)
+Create one unit for backend and one for worker (not included here). Ensure:
+- `WorkingDirectory=/opt/orionx-backend`
+- Environment file `.env`
+- Auto-restart on failure
