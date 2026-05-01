@@ -62,3 +62,28 @@ async def get_api_key(db: AsyncSession, api_key_id: str, user_id: str) -> ApiKey
 def mark_key_revoked(api_key: ApiKey) -> None:
     api_key.status = "revoked"
     api_key.revoked_at = datetime.now(timezone.utc)
+
+
+def resolve_quota_window_seconds(
+    quota_total: int | None,
+    quota_mode: str,
+    quota_window_seconds: int | None,
+) -> int | None:
+    if quota_total is None:
+        return None
+
+    mode = (quota_mode or "monthly").lower()
+    if mode == "hourly":
+        return 3600
+    if mode == "daily":
+        return 86400
+    if mode == "monthly":
+        return 2_592_000
+    if mode == "custom":
+        if quota_window_seconds is None or quota_window_seconds <= 0:
+            raise ValueError("quota_window_seconds must be > 0 for custom mode")
+        return quota_window_seconds
+    if mode == "lifetime":
+        # Practical lifetime for gateway counters.
+        return 315_360_000
+    raise ValueError("Unsupported quota_mode")

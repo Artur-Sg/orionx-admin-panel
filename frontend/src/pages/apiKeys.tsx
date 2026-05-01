@@ -10,11 +10,14 @@ type ApiKeyItem = {
     id: string;
     user_id: string;
     chain_id: string;
+    chain_name?: string | null;
     name: string;
     key_prefix: string;
     key_last4: string;
     status: string;
     quota_total: number | null;
+    quota_mode: string;
+    quota_window_seconds: number | null;
     quota_used: number;
     created_at: string;
     revoked_at: string | null;
@@ -30,15 +33,19 @@ type CreatedKey = {
     user_id: string;
     chain_id: string;
     quota_total: number | null;
+    quota_mode: string;
+    quota_window_seconds: number | null;
     quota_used: number;
     created_at: string;
 };
 type RevealedKey = { id: string; key: string };
+type GroupMode = "none" | "user" | "chain";
 
 type AdminUser = { id: string; email: string; role: string; is_active: boolean };
 type AdminUserListResponse = { items: AdminUser[]; total: number };
 type Chain = { id: string; name: string };
 type ChainListResponse = { items: Chain[]; total: number };
+type UserChainListResponse = { items: Chain[]; total: number };
 
 export const ApiKeysPage: React.FC = () => {
     const { data: identity } = useGetIdentity<{ role?: string }>();
@@ -54,8 +61,11 @@ export const ApiKeysPage: React.FC = () => {
     const [issueModalOpen, setIssueModalOpen] = useState(false);
     const [issueForm] = Form.useForm();
     const [creating, setCreating] = useState(false);
-    const [newKey, setNewKey] = useState<string | null>(null);
-    const [newKeyCopied, setNewKeyCopied] = useState(false);
+    const [groupBy, setGroupBy] = useState<GroupMode>("none");
+    const [search, setSearch] = useState("");
+    const [filterUserId, setFilterUserId] = useState<string | undefined>(undefined);
+    const [filterChainId, setFilterChainId] = useState<string | undefined>(undefined);
+    const [filterStatus, setFilterStatus] = useState<string | undefined>(undefined);
     const [revealModalOpen, setRevealModalOpen] = useState(false);
     const [revealedKey, setRevealedKey] = useState<string | null>(null);
 
@@ -72,6 +82,29 @@ export const ApiKeysPage: React.FC = () => {
         chains.forEach((c) => map.set(c.id, c.name));
         return map;
     }, [chains]);
+
+    const filteredItems = useMemo(() => {
+        if (!isAdmin) return items;
+
+        const normalized = search.trim().toLowerCase();
+        return items.filter((item) => {
+            if (filterUserId && item.user_id !== filterUserId) return false;
+            if (filterChainId && item.chain_id !== filterChainId) return false;
+            if (filterStatus && item.status !== filterStatus) return false;
+            if (!normalized) return true;
+
+            const user = (usersById.get(item.user_id) ?? item.user_id).toLowerCase();
+            const chain = (chainsById.get(item.chain_id) ?? item.chain_id).toLowerCase();
+            const name = item.name.toLowerCase();
+            const masked = `${item.key_prefix}...${item.key_last4}`.toLowerCase();
+            return (
+                user.includes(normalized) ||
+                chain.includes(normalized) ||
+                name.includes(normalized) ||
+                masked.includes(normalized)
+            );
+        });
+    }, [isAdmin, items, search, filterUserId, filterChainId, filterStatus, usersById, chainsById]);
 
     const load = async () => {
         const token = getToken();
@@ -105,12 +138,26 @@ export const ApiKeysPage: React.FC = () => {
         setChains(chainsData.items || []);
     };
 
+    const loadUserChainsLookup = async () => {
+        const token = getToken();
+        if (!token || isAdmin) return;
+        const chainsRes = await fetch(`${API_URL}/chains`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const chainsData = (await chainsRes.json()) as UserChainListResponse;
+        setChains(chainsData.items || []);
+    };
+
     useEffect(() => {
         load();
     }, [isAdmin]);
 
     useEffect(() => {
         loadAdminLookups();
+    }, [isAdmin]);
+
+    useEffect(() => {
+        loadUserChainsLookup();
     }, [isAdmin]);
 
     return (
@@ -127,11 +174,64 @@ export const ApiKeysPage: React.FC = () => {
                     </Space>
                 )}
 
-                <Table
-                    rowKey="id"
-                    loading={loading}
-                    dataSource={items}
-                    columns={[
+                {isAdmin && (
+                    <Space wrap>
+                        <Input
+                            allowClear
+                            placeholder="Search by user, chain, key name"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            style={{ width: 320 }}
+                        />
+                        <Select
+                            allowClear
+                            placeholder="Filter by user"
+                            value={filterUserId}
+                            onChange={(v) => setFilterUserId(v)}
+                            style={{ width: 260 }}
+                            showSearch
+                            optionFilterProp="label"
+                            options={users.map((u) => ({
+                                value: u.id,
+                                label: `${u.email} (${u.role})`,
+                            }))}
+                        />
+                        <Select
+                            allowClear
+                            placeholder="Filter by chain"
+                            value={filterChainId}
+                            onChange={(v) => setFilterChainId(v)}
+                            style={{ width: 220 }}
+                            showSearch
+                            optionFilterProp="label"
+                            options={chains.map((c) => ({ value: c.id, label: c.name }))}
+                        />
+                        <Select
+                            allowClear
+                            placeholder="Filter by status"
+                            value={filterStatus}
+                            onChange={(v) => setFilterStatus(v)}
+                            style={{ width: 180 }}
+                            options={[
+                                { value: "active", label: "active" },
+                                { value: "revoked", label: "revoked" },
+                            ]}
+                        />
+                        <Select<GroupMode>
+                            value={groupBy}
+                            onChange={setGroupBy}
+                            style={{ width: 220 }}
+                            options={[
+                                { value: "none", label: "No grouping" },
+                                { value: "user", label: "Group by user" },
+                                { value: "chain", label: "Group by chain" },
+                            ]}
+                        />
+                    </Space>
+                )}
+
+                {(() => {
+                    const columns = [
                         ...(isAdmin
                             ? [
                                   {
@@ -140,14 +240,14 @@ export const ApiKeysPage: React.FC = () => {
                                       render: (_: unknown, row: ApiKeyItem) =>
                                           usersById.get(row.user_id) ?? row.user_id,
                                   },
-                                  {
-                                      title: "Chain",
-                                      key: "chain",
-                                      render: (_: unknown, row: ApiKeyItem) =>
-                                          chainsById.get(row.chain_id) ?? row.chain_id,
-                                  },
                               ]
                             : []),
+                        {
+                            title: "Chain",
+                            key: "chain",
+                            render: (_: unknown, row: ApiKeyItem) =>
+                                row.chain_name ?? chainsById.get(row.chain_id) ?? row.chain_id,
+                        },
                         { title: "Name", dataIndex: "name", key: "name" },
                         {
                             title: "Key",
@@ -170,6 +270,23 @@ export const ApiKeysPage: React.FC = () => {
                             key: "quota",
                             render: (_: unknown, row: ApiKeyItem) =>
                                 row.quota_total == null ? "Unlimited" : row.quota_total,
+                        },
+                        {
+                            title: "Reset",
+                            key: "quota_mode",
+                            render: (_: unknown, row: ApiKeyItem) => {
+                                if (row.quota_total == null) return "N/A";
+                                if (row.quota_mode === "monthly") return "Monthly";
+                                if (row.quota_mode === "daily") return "Daily";
+                                if (row.quota_mode === "hourly") return "Hourly";
+                                if (row.quota_mode === "lifetime") return "Lifetime";
+                                if (row.quota_mode === "custom") {
+                                    return row.quota_window_seconds
+                                        ? `Custom (${row.quota_window_seconds}s)`
+                                        : "Custom";
+                                }
+                                return row.quota_mode;
+                            },
                         },
                         { title: "Used", dataIndex: "quota_used", key: "quota_used" },
                         {
@@ -261,9 +378,45 @@ export const ApiKeysPage: React.FC = () => {
                                       ),
                                   },
                               ]),
-                    ]}
-                    pagination={false}
-                />
+                    ];
+
+                    if (!isAdmin || groupBy === "none") {
+                        return (
+                            <Table
+                                rowKey="id"
+                                loading={loading}
+                                dataSource={filteredItems}
+                                columns={columns}
+                                pagination={false}
+                            />
+                        );
+                    }
+
+                    const grouped = filteredItems.reduce<Record<string, ApiKeyItem[]>>((acc, item) => {
+                        const key = groupBy === "user"
+                            ? usersById.get(item.user_id) ?? item.user_id
+                            : chainsById.get(item.chain_id) ?? item.chain_id;
+                        acc[key] = acc[key] ?? [];
+                        acc[key].push(item);
+                        return acc;
+                    }, {});
+
+                    return (
+                        <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+                            {Object.entries(grouped).map(([title, rows]) => (
+                                <Card key={title} size="small" title={title}>
+                                    <Table
+                                        rowKey="id"
+                                        loading={loading}
+                                        dataSource={rows}
+                                        columns={columns}
+                                        pagination={false}
+                                    />
+                                </Card>
+                            ))}
+                        </Space>
+                    );
+                })()}
             </Space>
 
             <Modal
@@ -289,11 +442,13 @@ export const ApiKeysPage: React.FC = () => {
                                 user_id: values.user_id,
                                 chain_id: values.chain_id,
                                 quota_total: values.quota_total ? Number(values.quota_total) : null,
+                                quota_mode: values.quota_mode ?? "monthly",
+                                quota_window_seconds: values.quota_window_seconds
+                                    ? Number(values.quota_window_seconds)
+                                    : null,
                             }),
                         });
                         const data = (await res.json()) as CreatedKey;
-                        setNewKey(data.key);
-                        setNewKeyCopied(false);
                         setIssueModalOpen(false);
                         issueForm.resetFields();
                         await load();
@@ -335,42 +490,36 @@ export const ApiKeysPage: React.FC = () => {
                     <Form.Item name="quota_total" label="Quota (optional)">
                         <Input placeholder="e.g. 10000" />
                     </Form.Item>
+                    <Form.Item name="quota_mode" label="Quota behavior" initialValue="monthly">
+                        <Select
+                            options={[
+                                { value: "monthly", label: "Monthly reset" },
+                                { value: "daily", label: "Daily reset" },
+                                { value: "hourly", label: "Hourly reset" },
+                                { value: "custom", label: "Custom period" },
+                                { value: "lifetime", label: "Lifetime total quota" },
+                            ]}
+                        />
+                    </Form.Item>
+                    <Form.Item shouldUpdate={(prev, cur) => prev.quota_mode !== cur.quota_mode}>
+                        {() => {
+                            const mode = issueForm.getFieldValue("quota_mode");
+                            if (mode !== "custom") return null;
+                            return (
+                                <Form.Item
+                                    name="quota_window_seconds"
+                                    label="Custom reset period (seconds)"
+                                    rules={[{ required: true, message: "Required for custom mode" }]}
+                                >
+                                    <Input placeholder="e.g. 604800 (7 days)" />
+                                </Form.Item>
+                            );
+                        }}
+                    </Form.Item>
                     <Typography.Text type="secondary">
-                        Selected user must have chain access configured. API key is shown once.
+                        Set quota behavior per key. For unlimited key leave Quota empty.
                     </Typography.Text>
                 </Form>
-            </Modal>
-
-            <Modal
-                title="New API key"
-                open={!!newKey}
-                closable={newKeyCopied}
-                maskClosable={false}
-                keyboard={false}
-                onCancel={() => {
-                    if (!newKeyCopied) return;
-                    setNewKey(null);
-                    setNewKeyCopied(false);
-                }}
-                onOk={() => {
-                    setNewKey(null);
-                    setNewKeyCopied(false);
-                }}
-                okText="Close"
-                okButtonProps={{ disabled: !newKeyCopied }}
-                cancelButtonProps={{ style: { display: "none" } }}
-            >
-                <Typography.Text
-                    copyable={{
-                        text: newKey ?? "",
-                        onCopy: () => setNewKeyCopied(true),
-                    }}
-                >
-                    {newKey}
-                </Typography.Text>
-                <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
-                    Copy this key now. Close will be enabled after copying.
-                </Typography.Paragraph>
             </Modal>
 
             <Modal

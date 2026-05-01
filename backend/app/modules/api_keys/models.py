@@ -21,6 +21,19 @@ class ApiKey(Base):
     key_last4: Mapped[str] = mapped_column(String(4), nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="active")
     quota_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quota_mode: Mapped[str] = mapped_column(String(32), default="monthly")
+    quota_window_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quota_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ApiKeyUsageEvent(Base):
+    __tablename__ = "api_key_usage_events"
+
+    request_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    api_key_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("api_keys.id"), nullable=False, index=True
+    )
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

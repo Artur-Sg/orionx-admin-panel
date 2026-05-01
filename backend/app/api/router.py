@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import api_keys, auth, billing, chains, health, users
+from app.api.routes import api_keys, auth, billing, chains, health, usage, users
 
 api_router = APIRouter()
 
@@ -10,3 +10,4 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(chains.router, tags=["chains"])
 api_router.include_router(api_keys.router, tags=["api_keys"])
+api_router.include_router(usage.router, tags=["usage"])

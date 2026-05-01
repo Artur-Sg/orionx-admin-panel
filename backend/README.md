@@ -26,7 +26,18 @@ GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 CORS_ORIGINS=http://localhost:5173
 APISIX_ADMIN_URL=http://localhost:9180
 APISIX_ADMIN_KEY=dummy
+APISIX_USAGE_SINK_URL=
+APISIX_USAGE_SINK_TOKEN=
 ```
+Usage ingestion notes:
+- `APISIX_USAGE_SINK_URL` must be reachable by APISIX (not localhost unless APISIX is on the same host/network namespace).
+- Use the backend usage endpoint path exactly: `/internal/usage/apisix`.
+- `APISIX_USAGE_SINK_TOKEN` must be non-empty to accept usage events.
+- Generate token:
+```bash
+openssl rand -hex 32
+```
+- After changing sink URL/token: restart backend + worker, then run chain `Resync`.
 
 ### 3) Run migrations
 ```bash
@@ -71,6 +82,8 @@ GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 CORS_ORIGINS=https://admin.example.com
 APISIX_ADMIN_URL=http://apisix-admin:9180
 APISIX_ADMIN_KEY=strong-key
+APISIX_USAGE_SINK_URL=https://backend.example.com/internal/usage/apisix
+APISIX_USAGE_SINK_TOKEN=<generated-secret>
 ```
 4. Run migrations:
 ```bash

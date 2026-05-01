@@ -69,6 +69,19 @@ async def upsert_chain_route(chain: Chain) -> None:
         },
         "upstream": _build_upstream(chain),
     }
+    if settings.apisix_usage_sink_url and settings.apisix_usage_sink_token:
+        payload["plugins"]["http-logger"] = {
+            "uri": settings.apisix_usage_sink_url,
+            "timeout": 3,
+            "auth_header": settings.apisix_usage_sink_token,
+            "log_format": {
+                "consumer_name": "$consumer_name",
+                "route_id": "$route_id",
+                "status": "$status",
+                "request_id": "$request_id",
+                "time": "$time_iso8601",
+            },
+        }
 
     headers = {"X-API-KEY": config.admin_key}
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -103,16 +116,32 @@ def _consumer_username(api_key_id: str) -> str:
     return f"key-{api_key_id}"
 
 
-async def upsert_consumer_api_key(api_key_id: str, plain_key: str) -> None:
+async def upsert_consumer_api_key(
+    api_key_id: str,
+    plain_key: str,
+    quota_total: int | None = None,
+    quota_window_seconds: int | None = None,
+) -> None:
     config = _get_config()
     username = _consumer_username(api_key_id)
+    plugins: dict = {
+        "key-auth": {
+            "key": plain_key,
+        }
+    }
+    if quota_total is not None and quota_total > 0 and quota_window_seconds is not None:
+        plugins["limit-count"] = {
+            "count": quota_total,
+            "time_window": quota_window_seconds,
+            "rejected_code": 429,
+            "key_type": "var",
+            "key": "consumer_name",
+            "show_limit_quota_header": True,
+        }
+
     payload = {
         "username": username,
-        "plugins": {
-            "key-auth": {
-                "key": plain_key,
-            }
-        },
+        "plugins": plugins,
     }
     headers = {"X-API-KEY": config.admin_key}
     async with httpx.AsyncClient(timeout=10.0) as client:

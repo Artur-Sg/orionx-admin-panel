@@ -18,6 +18,8 @@ class Settings(BaseSettings):
 
     apisix_admin_url: str
     apisix_admin_key: str
+    apisix_usage_sink_url: str | None = None
+    apisix_usage_sink_token: str | None = None
 
     google_client_id: str | None = None
 

@@ -54,10 +54,17 @@ async def _process_sync_task(task_id: str) -> None:
                 api_key_id = task.payload.get("api_key_id")
                 plain_key = task.payload.get("plain_key")
                 status_value = task.payload.get("status")
+                quota_total = task.payload.get("quota_total")
+                quota_window_seconds = task.payload.get("quota_window_seconds")
                 if not api_key_id:
                     raise ValueError("Missing api_key_id in task payload")
                 if status_value == "active" and plain_key:
-                    await upsert_consumer_api_key(api_key_id, plain_key)
+                    await upsert_consumer_api_key(
+                        api_key_id,
+                        plain_key,
+                        quota_total,
+                        quota_window_seconds,
+                    )
                 elif status_value == "revoked":
                     await delete_consumer(api_key_id)
                 else:

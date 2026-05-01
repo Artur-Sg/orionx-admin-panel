@@ -46,6 +46,8 @@ GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 CORS_ORIGINS=http://localhost:5173
 APISIX_ADMIN_URL=http://localhost:9180
 APISIX_ADMIN_KEY=change_me
+APISIX_USAGE_SINK_URL=
+APISIX_USAGE_SINK_TOKEN=
 ```
 
 Run migrations and server:
@@ -141,7 +143,17 @@ GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 CORS_ORIGINS=https://admin.example.com
 APISIX_ADMIN_URL=http://apisix-admin:9180
 APISIX_ADMIN_KEY=your-admin-key
+APISIX_USAGE_SINK_URL=
+APISIX_USAGE_SINK_TOKEN=
 ```
+Notes:
+- `APISIX_USAGE_SINK_URL` must be reachable from the APISIX server (public URL or private network URL), for example:
+  - `https://backend.example.com/internal/usage/apisix`
+- `APISIX_USAGE_SINK_TOKEN` is required for usage ingestion. Generate a strong token, for example:
+```bash
+openssl rand -hex 32
+```
+- After changing these values, restart backend + worker and run chain `Resync` so APISIX route plugins are updated.
 3. Run migrations:
 ```bash
 alembic upgrade head
