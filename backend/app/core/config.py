@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     redis_url: str
 
     jwt_secret: str
+    api_key_encryption_secret: str | None = None
     jwt_alg: str = "HS256"
     jwt_access_ttl_min: int = 30
     jwt_refresh_ttl_days: int = 30

@@ -253,6 +253,11 @@ export const ChainsPage: React.FC = () => {
             },
         },
         { title: "Visibility", dataIndex: "visibility", key: "visibility", sorter: true },
+        {
+            title: "Gateway endpoint",
+            key: "gateway_endpoint",
+            render: (_: unknown, record: Chain) => `${GATEWAY_URL}/rpc/${record.code}/`,
+        },
         { title: "RPC target", dataIndex: "rpc_target_url", key: "rpc_target_url" },
         {
             title: "Actions",

@@ -64,6 +64,7 @@ async def upsert_chain_route(chain: Chain) -> None:
         "methods": ["GET", "POST"],
         "status": 1,
         "plugins": {
+            "key-auth": {},
             "proxy-rewrite": proxy_rewrite,
         },
         "upstream": _build_upstream(chain),
@@ -96,3 +97,42 @@ async def chain_route_exists(code: str) -> bool:
             return False
         resp.raise_for_status()
         return True
+
+
+def _consumer_username(api_key_id: str) -> str:
+    return f"key-{api_key_id}"
+
+
+async def upsert_consumer_api_key(api_key_id: str, plain_key: str) -> None:
+    config = _get_config()
+    username = _consumer_username(api_key_id)
+    payload = {
+        "username": username,
+        "plugins": {
+            "key-auth": {
+                "key": plain_key,
+            }
+        },
+    }
+    headers = {"X-API-KEY": config.admin_key}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.put(
+            f"{config.admin_url}/apisix/admin/consumers/{username}",
+            json=payload,
+            headers=headers,
+        )
+        resp.raise_for_status()
+
+
+async def delete_consumer(api_key_id: str) -> None:
+    config = _get_config()
+    username = _consumer_username(api_key_id)
+    headers = {"X-API-KEY": config.admin_key}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.delete(
+            f"{config.admin_url}/apisix/admin/consumers/{username}",
+            headers=headers,
+        )
+        if resp.status_code in {404, 410}:
+            return
+        resp.raise_for_status()

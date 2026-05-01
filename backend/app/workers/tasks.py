@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from app.core.config import settings
-from app.integrations.apisix import delete_chain_route, upsert_chain_route
+from app.integrations.apisix import (
+    delete_chain_route,
+    delete_consumer,
+    upsert_chain_route,
+    upsert_consumer_api_key,
+)
 from app.modules.chains.models import Chain
 from app.modules.sync.models import SyncTask
 
@@ -44,6 +49,19 @@ async def _process_sync_task(task_id: str) -> None:
                     raise ValueError("Missing code in task payload")
                 fake_chain = Chain(code=code, name=code, rpc_target_url="http://localhost")
                 await delete_chain_route(fake_chain)
+
+            elif task.task_type == "api_key_upsert":
+                api_key_id = task.payload.get("api_key_id")
+                plain_key = task.payload.get("plain_key")
+                status_value = task.payload.get("status")
+                if not api_key_id:
+                    raise ValueError("Missing api_key_id in task payload")
+                if status_value == "active" and plain_key:
+                    await upsert_consumer_api_key(api_key_id, plain_key)
+                elif status_value == "revoked":
+                    await delete_consumer(api_key_id)
+                else:
+                    raise ValueError("Invalid api_key_upsert payload")
 
             else:
                 raise ValueError(f"Unknown task type: {task.task_type}")

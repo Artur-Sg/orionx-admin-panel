@@ -9,12 +9,13 @@ import {
 import routerProvider, { NavigateToResource } from "@refinedev/react-router-v6";
 import { Authenticated, Refine } from "@refinedev/core";
 import { ConfigProvider } from "antd";
-import { UserOutlined, ClusterOutlined, HeartOutlined } from "@ant-design/icons";
+import { UserOutlined, ClusterOutlined, HeartOutlined, KeyOutlined } from "@ant-design/icons";
 
 import { UsersPage } from "./pages/users";
 import { ChainsPage } from "./pages/chains";
 import { LoginPage } from "./pages/login";
 import { HealthPage } from "./pages/health";
+import { ApiKeysPage } from "./pages/apiKeys";
 import { PrivacyPage } from "./pages/privacy";
 import { TermsPage } from "./pages/terms";
 import { authProvider } from "./authProvider";
@@ -35,7 +36,10 @@ const AppRoutes: React.FC = () => {
   }, [location.pathname]);
 
   const resources = useMemo(() => {
-    const base = [{ name: "chains", list: "/chains", icon: <ClusterOutlined /> }];
+    const base = [
+      { name: "chains", list: "/chains", icon: <ClusterOutlined /> },
+      { name: "api-keys", list: "/api-keys", icon: <KeyOutlined /> },
+    ];
     if (role !== "admin") return base;
     return [
       ...base,
@@ -86,9 +90,10 @@ const AppRoutes: React.FC = () => {
             </Authenticated>
           }
         >
-          <Route index element={<NavigateToResource resource="users" />} />
+          <Route index element={<NavigateToResource resource="chains" />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/chains" element={<ChainsPage />} />
+          <Route path="/api-keys" element={<ApiKeysPage />} />
           <Route path="/health" element={<HealthPage />} />
           <Route path="*" element={<ErrorComponent />} />
         </Route>

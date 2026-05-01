@@ -53,30 +53,35 @@ async def admin_create_chain(
     db: AsyncSession = Depends(get_db),
     ctx: CurrentUser = Depends(require_role("admin")),
 ) -> ChainRead:
-    existing = await db.execute(select(Chain).where(Chain.code == payload.code))
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=400, detail="Chain code already exists")
-    chain = Chain(
-        code=payload.code,
-        name=payload.name,
-        status=payload.status,
-        visibility=payload.visibility,
-        rpc_target_url=payload.rpc_target_url,
-        description=payload.description,
-        sort_order=payload.sort_order,
-        created_by=ctx.user.id,
-        sync_status="pending",
-        sync_error=None,
-    )
-    db.add(chain)
-    await db.commit()
-    task = await create_sync_task(db, "chain_upsert", {"chain_id": str(chain.id)})
-    await db.commit()
     try:
-        get_queue().enqueue("app.workers.tasks.process_sync_task", str(task.id))
+        existing = await db.execute(select(Chain).where(Chain.code == payload.code))
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=400, detail="Chain code already exists")
+        chain = Chain(
+            code=payload.code,
+            name=payload.name,
+            status=payload.status,
+            visibility=payload.visibility,
+            rpc_target_url=payload.rpc_target_url,
+            description=payload.description,
+            sort_order=payload.sort_order,
+            created_by=ctx.user.id,
+            sync_status="pending",
+            sync_error=None,
+        )
+        db.add(chain)
+        await db.commit()
+        task = await create_sync_task(db, "chain_upsert", {"chain_id": str(chain.id)})
+        await db.commit()
+        try:
+            get_queue().enqueue("app.workers.tasks.process_sync_task", str(task.id))
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Enqueue failed: {exc}") from exc
+        return ChainRead.model_validate(chain)
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Enqueue failed: {exc}") from exc
-    return ChainRead.model_validate(chain)
+        raise HTTPException(status_code=500, detail=f"Chain create failed: {exc}") from exc
 
 
 @router.put("/admin/chains/{chain_id}", response_model=ChainRead)
